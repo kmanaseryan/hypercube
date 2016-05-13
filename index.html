@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en" ng-app>
+  <head>
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/bootstrap.min.js"></script>
+    <script src="/js/angular.min.js"></script>
+    
+   
+    <title>Messy Broadcasting in Hypercubes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/css/bootstrap-responsive.min.css">
+    <style>
+      body {
+        background-color: #1F1F29;
+      }
+    </style>
+    <script>
+    
+      function HyperController($scope) {
+          	
+      	function drawNode(x, y){
+      		$("svg")
+      		.append('<circle cx='+ x +' cy="'+ y +'" r="5" stroke="white" stroke-width="0" fill="#01ACC7" />');
+      		
+      	}
+      	
+      	function drawTip(x, y){
+      		 $("svg")
+      		.append('<rect x="'+ x +'" y="'+ y +'" width="10" height="10" style="fill:rgb(0,0,255); stroke:rgb(0,0,0)" />');
+      	}
+      	function drawValue(x, y, value){
+      		$("svg")
+      		.append('<text x='+ x +' y="'+ y +'" fill="white" font-size="14">'+ value +'</text>');
+      		
+      	}
+      	
+      	function drawLine(x1, x2, y1, y2, color, width){
+      		$("svg")
+      		.append('<line x1="'+ x1 +'" y1="'+ y1 +'" x2="'+ x2 +'" y2="'+ y2 +'" style="stroke:'+ (color || "gray") +';stroke-width:'+ (width || "1") +'" />');
+      	}
+      	
+      	function render(){
+      		$("svg").html($("svg").html());
+      	}
+      	
+      	
+      	function numberOf1(num){
+      		var amount = 0;
+      		for(var i = 0; i < num.length; i++){
+      			if(num[i] == 1)
+      				amount++;
+      		}
+      		return amount;
+      	}
+      	
+      	function randomIterate(edges, callback){
+      		var i = 0;
+      		var $edges;
+      		if(Array.isArray(edges)){
+      			$edges = JSON.parse(JSON.stringify(edges));
+      			while($edges.length != 0){
+      				var j = Math.floor((Math.random() * $edges.length) + 0);
+      				var node = $edges[j];
+      				$edges.splice(j, 1);
+      				callback(node, i);
+      				i++;
+      			}
+      		}
+      	}
+      	
+      	function add0(num, k){
+      		var num0 = "";
+      		if(num.length < k){
+      			for(var i = 0; i < k - num.length; i++){
+      				num0 += "0";
+      			}
+      		}
+      		return num0 + num;
+      	}
+      	
+      	function getParents(num){
+      		var parents = [];
+      		
+      		for(var i = 0; i < num.length; i++){
+      			if(num[i] == 1){
+      				var newNum = num.substr(0, i) + '0' + num.substr(i + 1);
+      				parents.push(newNum);
+      			}
+      		}
+      		return parents;
+      	}
+      	
+      	
+      	var k = 5;
+      	var len = k;
+      	var n = Math.pow(2, k);
+      	var groups = [];
+      	var nodes = [];
+      	var nodeObects = [];
+      	
+      	var edges = [];
+      	var lenEdge = 0;
+      	var maxLenGroup = 0;
+      	var $times = [];
+      	$times[0] = 0;
+      	var $nodes = nodeObects;
+      	
+      	var neighbors = [];
+      	
+      	function broadcastSeq(node, parent, time){
+      		if(!$nodes[node].time)
+      			$nodes[node].time = time
+      		if(!$nodes[node].parents)
+      			$nodes[node].parents = [];
+      		if($nodes[node].time == time){
+      			var found = false;
+      			for(var j = 0; j < $nodes[node].parents.length; j++){
+      				if($nodes[node].parents[j] == parent)
+      					found = true;
+      			}
+      			if(!found)
+      				$nodes[node].parents.push(parent);
+      		}
+      		if($nodes[node].time > time){
+      			$nodes[node].parents = [];
+      			$nodes[node].parents.push(parent);
+      		}
+      		
+      		if(!edges[node] || edges[node].length == 0){
+      			return
+      		}
+      		
+      		
+      		for(var i = 0; i < edges[node].length; i++){
+        			broadcastSeq(edges[node][i], node, i + time + 1);
+        			if($nodes[edges[node][i]].time < i + time + 1){
+        				time--;
+        			}
+      		}
+      		return;
+      	}
+      	
+      	function broadcastRandom(neighbors, nodes, objNodes){
+      		var $nodes = JSON.parse(JSON.stringify(nodes));
+      		var node = $nodes.pop();
+      		var i = 0;
+      		var informed = [{value: node, time: i, parent: null}];
+      		
+      		while($nodes.length){
+      			i++;
+      			informed = broadcast(informed, neighbors, $nodes, i);
+      		}
+      		return informed;
+      	}
+      	
+      	function broadcast(informed, neighbors, nodes, i){
+      		var newInformed = JSON.parse(JSON.stringify(informed));
+      		
+      		for(var j = 0; j < informed.length; j++){
+      			var node = informed[j];
+      			var infNode = informRandom(node.value, informed, neighbors, i);
+      			if(infNode){
+      				var obj = {value: infNode, time: Math.max(node.time, i), parent: node};
+      				newInformed.push(obj);
+      				for(var k = 0; k < nodes.length; k++){
+      					if(nodes[k] == infNode){
+      						nodes.splice(k, 1);
+      					}
+      				}
+      			}
+      			
+      		}
+      		return newInformed;
+      	}
+      	
+      	function informRandom(value, informed, neighbors, time){
+      		var $neighbors = JSON.parse(JSON.stringify(neighbors[value]));
+      		var i = Math.floor((Math.random() * $neighbors.length));
+      		var infNode = $neighbors[i];
+      		var found = true;
+      		
+      		while(found && informed.length){
+      			found = false;
+      			for(var j = 0; j < informed.length; j++){
+      				if((informed[j].value == infNode) && (informed[j].time != time)){
+      					$neighbors.splice(i, 1);
+      					i = Math.floor((Math.random() * $neighbors.length));
+      					infNode = $neighbors[i];
+      					found = true;
+      				}
+      			}
+      		}
+      		return infNode;
+      	}
+      	
+      	$scope.drawHypercube = function(){
+      	    $("svg").empty();
+      	    $scope.bTime = 0;
+        		k = $scope.k;
+        		len = k;
+        		n = Math.pow(2, k);
+        		groups = [];
+        		nodes = [];
+        		nodeObects = [];
+        		
+        		edges = [];
+        		lenEdge = 0;
+        		maxLenGroup = 0;
+        		$times = [];
+        		$times[0] = 0;
+        		$nodes = nodeObects;
+        		
+        		neighbors = [];
+        			
+          	for(var i = 0; i < n; i++){
+          	  	var node = Number(i).toString(2);
+          		  var num1 = numberOf1(node);
+          		  node = add0(node, k);
+          		  if(!groups[num1]) 
+          			  groups[num1] = [];
+          		  groups[num1].push(node);
+          		
+          	  	if(groups[num1].length > maxLenGroup)
+          			maxLenGroup = groups[num1].length;
+          			
+          		  nodes.push(node);
+          	}
+          	for(var i = n - 1; i >= 0; i--){
+          		  var parents = getParents(nodes[i]);
+          		  if(!edges[nodes[i]]){
+          			   edges[nodes[i]] = [];
+          		     lenEdge++;
+          		  }
+          		edges[nodes[i]] = edges[nodes[i]].concat(parents);	
+          	}
+          	
+          	
+          	for(var i = groups.length - 1; i >= 0; i--){
+          		var group = groups[i];
+          		var y = i * 50 * 2 * k / 3;
+          		for(var j = 0; j < group.length; j++){
+          			var margin = group.length;
+          			margin /= 2;
+          			
+          			
+          			var x = (maxLenGroup/2 - margin + j) * 60;
+          			
+          			drawNode(x + 10, y + 10);
+          			drawValue(x + 10, y + 10, group[j])
+          			nodeObects[group[j]] = {x: x + 10, y: y + 10};
+          		}
+          		
+          	}
+          	for(var i = 0; i < nodes.length; i++){
+          		var node = nodes[i];
+          		if(!neighbors[node])
+          				neighbors[node] = [];
+          			neighbors[node] = neighbors[node].concat(edges[node]);
+          		for(var j = 0; j < edges[node].length; j++){
+          			parent = edges[node][j];
+          			if(!neighbors[parent])
+          				neighbors[parent] = [];
+          			neighbors[parent].push(node);
+          			drawLine(nodeObects[node].x, nodeObects[parent].x, nodeObects[node].y, nodeObects[parent].y);
+          		}
+          	}
+          	render();
+      	}
+      	
+        $scope.runEfficientBC = function(){
+          $scope.drawHypercube()
+          broadcastSeq(nodes[nodes.length - 1], null, 0);
+          
+          for(var node in $nodes){
+          	for(var j = 0; j < $nodes[node].parents.length; j++){
+          			parent = $nodes[node].parents[j];
+          			if(parent){
+          				var x = Math.abs($nodes[node].x - $nodes[parent].x) / 2 + Math.min($nodes[node].x, $nodes[parent].x);
+          				var y = Math.abs($nodes[node].y - $nodes[parent].y) / 2 + Math.min($nodes[node].y, $nodes[parent].y);
+          				drawValue(x, y, $nodes[node].time);
+          				if(!$times[$nodes[node].time])
+          					$times[$nodes[node].time] = [];
+          				$times[$nodes[node].time].push({x1: $nodes[node].x, x2: $nodes[parent].x, 
+          											 y1: $nodes[node].y, y2: $nodes[parent].y})
+          			}
+          		}
+          	}
+          	
+          	$scope.bTime = k;
+          	for(var i = 1; i < $times.length; i++){
+          		(function(){
+          			var time = $times[i]
+          		
+          			setTimeout(function() {
+          				for(var j = 0; j < time.length; j++){
+          					drawLine(time[j].x1, time[j].x2, time[j].y1, time[j].y2, "#4AF4FF", 2)
+          				}
+          				render();
+          			
+          			}, 1000 * i);
+          				
+          		})()
+          		
+          		
+          	}
+	
+	      }
+          
+        $scope.runRandomBC = function(){
+          $scope.drawHypercube();
+          var bTime = 0;
+          var informed = broadcastRandom(neighbors, nodes, nodeObects);
+        	while(informed.length){
+        		var node = informed.pop();
+        		var parent = node.parent;
+        		var time = node.time;
+        		bTime = Math.max(time, bTime);
+        		if(parent){
+        			parent = parent.value;
+        			node = node.value;
+        			
+        			var x = Math.abs($nodes[node].x - $nodes[parent].x) / 2 + Math.min($nodes[node].x, $nodes[parent].x);
+        			var y = Math.abs($nodes[node].y - $nodes[parent].y) / 2 + Math.min($nodes[node].y, $nodes[parent].y);
+        			drawValue(x, y, time);
+        			if(!$times[time])
+        				$times[time] = [];
+        			$times[time].push({x1: $nodes[node].x, x2: $nodes[parent].x, 
+        										 y1: $nodes[node].y, y2: $nodes[parent].y})
+        		}
+        	}
+        	
+        	
+        	for(var i = 1; i < $times.length; i++){
+        		(function(){
+        			var time = $times[i];
+        			setTimeout(function() {
+        				for(var j = 0; j < time.length; j++){
+        					drawLine(time[j].x1, time[j].x2, time[j].y1, time[j].y2, "#4AF4FF", 2)
+        				}
+        				render();
+        			
+        			}, 1000 * i);
+        				
+        		})()
+        	}
+          $scope.bTime = bTime;
+          }
+      	
+      	$scope.runRundomBCWithoutDrawing = function(){
+      	           $scope.drawHypercube();
+          var bTime = 0;
+          var informed = broadcastRandom(neighbors, nodes, nodeObects);
+        	while(informed.length){
+        		var node = informed.pop();
+        		var parent = node.parent;
+        		var time = node.time;
+        		bTime = Math.max(time, bTime);
+        		
+        	}
+          $scope.bTime = bTime;
+          
+      	}
+      	
+      	  
+      }
+    </script>
+  </head>
+  <body>
+    
+    <div class="container" ng-controller="HyperController" ng-cloak>
+      
+      <div class="row">
+        <div class="form-group">
+          <label style="color: white;">Power of 2</label>
+          <input ng-model="k" style="width:50px; margin-bottom:0px" type="text" class="form-control">
+          <button type="button" class="btn btn-primary" ng-click="drawHypercube()">OK</button>
+          <button type="button" class="btn btn-default" ng-click="runEfficientBC()">Efficient BC</button>
+          <button type="button" class="btn btn-default" ng-click="runRandomBC()">Random BC</button>
+          <button type="button" class="btn btn-default" ng-click="runRundomBCWithoutDrawing()">Random BC Without Drawing</button>
+          <p ng-show="bTime" style="color: #7FCE7F; padding-top: 3px;">Broadcast time: {{bTime}}</p>
+      
+        </div>
+      </div>
+      
+      <svg style="height:10000px; width:100000px; position: absolute; left: 0px; top:70px;" >
+      </svg>
+    </div>
+   
+  </body>
+</html>
